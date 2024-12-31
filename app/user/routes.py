@@ -2,16 +2,17 @@
 用户路由
 """
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
-from app.user.models import UserCreate, UserResponse, UserUpdate, Token
+from app.user.models import UserCreate, UserResponse, UserUpdate, Token, PasswordChange
 from app.user.security import (
     get_password_hash,
     verify_password,
     create_access_token,
     get_current_user
 )
+from app.user.avatar import save_uploaded_avatar, generate_avatar
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
@@ -148,4 +149,118 @@ async def update_profile(
         {"username": current_user.username}
     )
     updated_user["id"] = str(updated_user.pop("_id"))
-    return UserResponse(**updated_user) 
+    return UserResponse(**updated_user)
+
+@router.post("/avatar/upload", response_model=UserResponse)
+async def upload_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """上传头像"""
+    db: AsyncIOMotorDatabase = request.app.mongodb
+    
+    # 验证文件类型
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只能上传图片文件"
+        )
+    
+    # 保存头像
+    avatar_path = await save_uploaded_avatar(file, current_user.username)
+    
+    # 更新用户头像
+    result = await db.users.update_one(
+        {"username": current_user.username},
+        {"$set": {
+            "avatar": avatar_path,
+            "updated_at": datetime.utcnow()
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    
+    # 获取更新后的用户信息
+    updated_user = await db.users.find_one({"username": current_user.username})
+    updated_user["id"] = str(updated_user.pop("_id"))
+    return UserResponse(**updated_user)
+
+@router.post("/avatar/generate", response_model=UserResponse)
+async def generate_random_avatar(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """生成随机头像"""
+    db: AsyncIOMotorDatabase = request.app.mongodb
+    
+    # 生成头像
+    avatar_path = generate_avatar(current_user.username)
+    
+    # 更新用户头像
+    result = await db.users.update_one(
+        {"username": current_user.username},
+        {"$set": {
+            "avatar": avatar_path,
+            "updated_at": datetime.utcnow()
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    
+    # 获取更新后的用户信息
+    updated_user = await db.users.find_one({"username": current_user.username})
+    updated_user["id"] = str(updated_user.pop("_id"))
+    return UserResponse(**updated_user)
+
+@router.post("/password/change")
+async def change_password(
+    request: Request,
+    password_change: PasswordChange,
+    current_user: dict = Depends(get_current_user)
+):
+    """修改密码"""
+    db: AsyncIOMotorDatabase = request.app.mongodb
+    
+    # 获取用户信息
+    user = await db.users.find_one({"username": current_user.username})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    
+    # 验证当前密码
+    if not verify_password(password_change.current_password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前密码错误"
+        )
+    
+    # 更新密码
+    hashed_password = get_password_hash(password_change.new_password)
+    result = await db.users.update_one(
+        {"username": current_user.username},
+        {
+            "$set": {
+                "hashed_password": hashed_password,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="密码更新失败"
+        )
+    
+    return {"message": "密码修改成功"} 

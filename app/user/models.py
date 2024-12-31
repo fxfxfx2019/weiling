@@ -116,4 +116,28 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    username: str 
+    username: str
+
+class PasswordChange(BaseModel):
+    """密码修改"""
+    current_password: str = Field(..., min_length=6, max_length=50)
+    new_password: str = Field(..., min_length=6, max_length=50)
+    confirm_password: str = Field(..., min_length=6, max_length=50)
+    
+    @validator('new_password')
+    def validate_new_password(cls, v, values):
+        if 'current_password' in values and v == values['current_password']:
+            raise ValueError("新密码不能与当前密码相同")
+        if not any(c.isupper() for c in v):
+            raise ValueError("密码必须包含至少一个大写字母")
+        if not any(c.islower() for c in v):
+            raise ValueError("密码必须包含至少一个小写字母")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("密码必须包含至少一个数字")
+        return v
+    
+    @validator('confirm_password')
+    def validate_confirm_password(cls, v, values):
+        if 'new_password' in values and v != values['new_password']:
+            raise ValueError("两次输入的新密码不一致")
+        return v 
