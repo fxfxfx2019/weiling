@@ -1,49 +1,70 @@
-from openai import OpenAI
-from dotenv import load_dotenv
+"""
+OpenAI API 客户端
+"""
 import os
+import json
 from typing import List, Dict, Any, Optional
+from openai import OpenAI, AsyncOpenAI
+from dotenv import load_dotenv
 
 class OpenAIClient:
-    """OpenAI API客户端封装类"""
-    
     def __init__(self):
         # 加载环境变量
         load_dotenv()
-        self.client = OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY")
-        )
-    
+        
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY 环境变量未设置")
+            
+        # 创建同步和异步客户端
+        self.client = OpenAI(api_key=api_key)
+        self.async_client = AsyncOpenAI(api_key=api_key)
+        self.default_model = "o1-preview"  # 设置默认模型
+        
     def chat_completion(
-        self, 
-        messages: List[Dict[str, str]], 
-        model: str = "gpt-3.5-turbo",
+        self,
+        messages: List[Dict[str, str]],
+        model: str = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None
     ) -> str:
         """
-        调用OpenAI聊天补全API
-        
-        Args:
-            messages: 消息列表
-            model: 模型名称
-            temperature: 温度参数(0-1)
-            max_tokens: 最大token数
-            
-        Returns:
-            str: AI响应的文本
+        同步方式调用 ChatGPT
         """
         try:
-            response = self.client.chat.completions.create(
-                model=model,
+            completion = self.client.chat.completions.create(
+                model=model or self.default_model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens
             )
-            return response.choices[0].message.content
+            return completion.choices[0].message.content
         except Exception as e:
-            print(f"OpenAI API调用出错: {e}")
-            return f"错误: {str(e)}"
-            
+            print(f"API 请求错误: {str(e)}")
+            raise
+        
+    async def chat_completion_async(
+        self,
+        messages: List[Dict[str, str]],
+        model: str = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None
+    ) -> str:
+        """
+        异步方式调用 ChatGPT
+        """
+        try:
+            completion = await self.async_client.chat.completions.create(
+                model=model or self.default_model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"API 请求错误: {str(e)}")
+            raise
+                
     def generate_image(
         self,
         prompt: str,
@@ -52,20 +73,19 @@ class OpenAIClient:
         n: int = 1
     ) -> List[str]:
         """
-        调用DALL-E 3生成图片
+        生成图片
         
         Args:
             prompt: 图片描述
-            size: 图片尺寸
-            quality: 图片质量
+            size: 图片尺寸 ("1024x1024", "512x512", "256x256")
+            quality: 图片质量 ("standard", "hd")
             n: 生成图片数量
             
         Returns:
-            List[str]: 图片URL列表
+            图片URL列表
         """
         try:
             response = self.client.images.generate(
-                model="dall-e-3",
                 prompt=prompt,
                 size=size,
                 quality=quality,
@@ -73,5 +93,27 @@ class OpenAIClient:
             )
             return [image.url for image in response.data]
         except Exception as e:
-            print(f"图片生成出错: {e}")
-            return [] 
+            print(f"图片生成错误: {str(e)}")
+            raise
+        
+    async def generate_image_async(
+        self,
+        prompt: str,
+        size: str = "1024x1024",
+        quality: str = "standard",
+        n: int = 1
+    ) -> List[str]:
+        """
+        异步方式生成图片
+        """
+        try:
+            response = await self.async_client.images.generate(
+                prompt=prompt,
+                size=size,
+                quality=quality,
+                n=n
+            )
+            return [image.url for image in response.data]
+        except Exception as e:
+            print(f"图片生成错误: {str(e)}")
+            raise 
