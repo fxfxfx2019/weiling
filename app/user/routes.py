@@ -5,16 +5,20 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, status, Depends, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
+from pydantic import BaseModel
 from app.user.models import UserCreate, UserResponse, UserUpdate, Token, PasswordChange
 from app.user.security import (
     get_password_hash,
     verify_password,
-    create_access_token,
     get_current_user
 )
+from app.user.jwt_handler import jwt_handler
 from app.user.avatar import save_uploaded_avatar, generate_avatar
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+
+class RefreshToken(BaseModel):
+    refresh_token: str
 
 router = APIRouter()
 
@@ -55,7 +59,7 @@ async def register(request: Request, user: UserCreate):
 
 @router.post("/login", response_model=Token)
 async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
-    """用户登录（支持用户名或邮箱登录）"""
+    """用户登录"""
     db: AsyncIOMotorDatabase = request.app.mongodb
     
     # 查找用户（支持用户名或邮箱）
@@ -89,19 +93,38 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # 创建访问令牌
-    access_token_expires = timedelta(
-        minutes=request.app.state.settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    access_token = create_access_token(
-        data={"sub": user["username"]},  # 统一使用username作为token的subject
-        expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    # 创建访问令牌和刷新令牌
+    access_token = jwt_handler.create_access_token(subject=user["username"])
+    refresh_token = jwt_handler.create_refresh_token(subject=user["username"])
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(token_data: RefreshToken):
+    """刷新访问令牌"""
+    try:
+        # 验证刷新令牌并获取新的访问令牌
+        new_access_token = jwt_handler.refresh_access_token(token_data.refresh_token)
+        return {
+            "access_token": new_access_token,
+            "refresh_token": token_data.refresh_token,  # 返回原有的刷新令牌
+            "token_type": "bearer"
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无效的刷新令牌"
+        )
 
 @router.get("/profile", response_model=UserResponse)
 async def get_profile(request: Request, current_user: dict = Depends(get_current_user)):
-    """获取用户个人信息"""
+    """获取用户信息"""
     db: AsyncIOMotorDatabase = request.app.mongodb
     user = await db.users.find_one({"username": current_user.username})
     if not user:

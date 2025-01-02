@@ -9,7 +9,6 @@ services:
       - MONGODB_URL=mongodb://mongo:27017
       - MONGODB_DB_NAME=weiling
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - mongo
     volumes:
@@ -18,7 +17,7 @@ services:
       - weiling-network
 
   mongo:
-    image: mongo:4.4
+    image: mongo:latest
     ports:
       - "27017:27017"
     volumes:

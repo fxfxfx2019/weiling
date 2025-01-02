@@ -7,7 +7,7 @@ from datetime import datetime
 
 BASE_URL = "http://localhost:8000/api"
 
-def test_user_flow():
+def test_user_api():
     # 1. 注册新用户
     register_data = {
         "username": f"testuser_{int(datetime.now().timestamp())}",  # 使用时间戳确保用户名唯一
@@ -82,7 +82,7 @@ def test_user_flow():
 
 if __name__ == "__main__":
     try:
-        test_user_flow()
+        test_user_api()
         print("\n所有测试通过！")
     except AssertionError as e:
         print(f"\n测试失败: {str(e)}")

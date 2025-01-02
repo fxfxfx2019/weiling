@@ -123,7 +123,7 @@ def test_user_workflow():
     results["update"] = tester.update_profile()
     return results
 
-def run_concurrent_tests(num_users=100):
+def test_concurrent_users(num_users=100):
     """运行并发测试"""
     print(f"\n=== 开始并发测试 ({num_users}个用户) ===")
     start_time = time.time()
@@ -198,4 +198,4 @@ if __name__ == "__main__":
     print("=== 用户系统并发测试 ===")
     print("测试内容：用户注册、登录和信息更新")
     print("并发用户数：100")
-    run_concurrent_tests(100) 
+    test_concurrent_users(100) 

@@ -38,8 +38,6 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=50)
     avatar: Optional[str] = None
-    bind_status: bool = False
-    sub_ai_id: Optional[str] = None
 
     @validator('username')
     def validate_username(cls, v):
@@ -58,12 +56,8 @@ class UserCreate(BaseModel):
         return v
 
     @validator('email')
-    def validate_email_domain(cls, v):
-        # 可以添加特定的邮箱域名验证
-        allowed_domains = ['gmail.com', 'outlook.com', 'qq.com', '163.com', 'example.com']
-        domain = v.split('@')[1].lower()
-        if domain not in allowed_domains:
-            raise ValueError(f"不支持的邮箱域名。支持的域名: {', '.join(allowed_domains)}")
+    def validate_email(cls, v):
+        # 基本邮箱格式验证已由EmailStr处理
         return v
 
 class UserInDB(UserBase):
@@ -104,8 +98,6 @@ class UserResponse(BaseModel):
     username: str
     email: str
     avatar: Optional[str] = None
-    bind_status: bool = False
-    sub_ai_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     status: str = "active"
@@ -113,6 +105,7 @@ class UserResponse(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
 
 class TokenData(BaseModel):
