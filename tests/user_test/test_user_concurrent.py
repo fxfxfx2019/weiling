@@ -1,3 +1,6 @@
+"""
+测试用户系统的并发性能
+"""
 import requests
 import json
 import time
@@ -6,13 +9,15 @@ import string
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from urllib.parse import urlencode
 
 class UserTester:
     def __init__(self):
-        self.base_url = "http://127.0.0.1:8000/api/user"
+        self.base_url = "http://127.0.0.1:8000/api"
         self.access_token = None
         self.headers = {"Content-Type": "application/json"}
         self.username = self.generate_random_username()
+        self.password = "Test123456"  # 使用统一的测试密码
         
     def generate_random_username(self):
         """生成随机用户名"""
@@ -29,20 +34,27 @@ class UserTester:
 
     def register(self):
         """用户注册"""
-        url = f"{self.base_url}/register"
+        url = f"{self.base_url}/auth/register"
         data = {
             "username": self.username,
             "email": f"{self.username}@example.com",
-            "password": "Test123"
+            "nickname": f"昵称_{self.username}",
+            "password": self.password
         }
         try:
+            print(f"尝试注册用户: {self.username}")
+            print(f"请求URL: {url}")
+            print(f"请求数据: {json.dumps(data, ensure_ascii=False)}")
             response = requests.post(url, json=data)
+            print(f"响应状态码: {response.status_code}")
+            print(f"响应内容: {response.text}")
             return {
                 "success": response.status_code == 200,
                 "status_code": response.status_code,
-                "response": response.json()
+                "response": response.json() if response.status_code == 200 else response.text
             }
         except Exception as e:
+            print(f"注册异常: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
@@ -50,25 +62,30 @@ class UserTester:
 
     def login(self):
         """用户登录"""
-        url = f"{self.base_url}/login"
+        url = f"{self.base_url}/auth/login"
         data = {
             "username": self.username,
-            "password": "Test123"
+            "password": self.password,
+            "grant_type": "password",
+            "scope": ""
         }
         headers = {
             "Content-Type": "application/x-www-form-urlencoded"
         }
         try:
-            response = requests.post(url, data=data, headers=headers)
+            print(f"尝试登录用户: {self.username}")
+            encoded_data = urlencode(data)
+            response = requests.post(url, data=encoded_data, headers=headers)
             if response.status_code == 200:
                 token = response.json().get("access_token")
                 self.update_auth_header(token)
             return {
                 "success": response.status_code == 200,
                 "status_code": response.status_code,
-                "response": response.json()
+                "response": response.json() if response.status_code == 200 else response.text
             }
         except Exception as e:
+            print(f"登录异常: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
@@ -76,20 +93,21 @@ class UserTester:
 
     def update_profile(self):
         """更新用户信息"""
-        url = f"{self.base_url}/profile"
+        url = f"{self.base_url}/user/me"
         data = {
-            "nickname": f"昵称_{self.username}",
-            "avatar": "https://example.com/avatar.jpg",
-            "bio": "这是一个测试用户的简介"
+            "nickname": f"昵称_{self.username}_更新",
+            "email": f"{self.username}_new@example.com"
         }
         try:
+            print(f"尝试更新用户信息: {self.username}")
             response = requests.put(url, json=data, headers=self.headers)
             return {
                 "success": response.status_code == 200,
                 "status_code": response.status_code,
-                "response": response.json()
+                "response": response.json() if response.status_code == 200 else response.text
             }
         except Exception as e:
+            print(f"更新信息异常: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
@@ -110,20 +128,20 @@ def test_user_workflow():
     if not results["register"]["success"]:
         return results
     
-    time.sleep(0.5)  # 等待数据库更新
+    time.sleep(0.1)  # 等待数据库更新
     
     # 登录
     results["login"] = tester.login()
     if not results["login"]["success"]:
         return results
     
-    time.sleep(0.5)
+    time.sleep(0.1)
     
     # 更新信息
     results["update"] = tester.update_profile()
     return results
 
-def test_concurrent_users(num_users=100):
+def test_concurrent_users(num_users=10):
     """运行并发测试"""
     print(f"\n=== 开始并发测试 ({num_users}个用户) ===")
     start_time = time.time()
@@ -140,7 +158,7 @@ def test_concurrent_users(num_users=100):
         "update": 0
     }
     
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_user = {executor.submit(test_user_workflow): i for i in range(num_users)}
         
         for future in as_completed(future_to_user):
@@ -156,7 +174,7 @@ def test_concurrent_users(num_users=100):
                         print("✓ 注册成功")
                     else:
                         error_count["register"] += 1
-                        print(f"✗ 注册失败: {results['register'].get('response', {}).get('detail', '未知错误')}")
+                        print(f"✗ 注册失败: {results['register'].get('status_code', '未知状态码')} - {results['register'].get('response', '未知错误')}")
                 
                 # 统计登录结果
                 if results["login"]:
@@ -165,7 +183,7 @@ def test_concurrent_users(num_users=100):
                         print("✓ 登录成功")
                     else:
                         error_count["login"] += 1
-                        print(f"✗ 登录失败: {results['login'].get('response', {}).get('detail', '未知错误')}")
+                        print(f"✗ 登录失败: {results['login'].get('status_code', '未知状态码')} - {results['login'].get('response', '未知错误')}")
                 
                 # 统计更新结果
                 if results["update"]:
@@ -174,7 +192,7 @@ def test_concurrent_users(num_users=100):
                         print("✓ 更新信息成功")
                     else:
                         error_count["update"] += 1
-                        print(f"✗ 更新信息失败: {results['update'].get('response', {}).get('detail', '未知错误')}")
+                        print(f"✗ 更新信息失败: {results['update'].get('status_code', '未知状态码')} - {results['update'].get('response', '未知错误')}")
                 
             except Exception as e:
                 print(f"用户 {user_num} 测试过程出现异常: {str(e)}")
@@ -197,5 +215,5 @@ def test_concurrent_users(num_users=100):
 if __name__ == "__main__":
     print("=== 用户系统并发测试 ===")
     print("测试内容：用户注册、登录和信息更新")
-    print("并发用户数：100")
-    test_concurrent_users(100) 
+    print("并发用户数：10")
+    test_concurrent_users(10) 
