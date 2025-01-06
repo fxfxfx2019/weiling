@@ -11,11 +11,11 @@ sys.path.insert(0, project_root)
 
 import pytest
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from app.core.security import create_access_token, get_password_hash
+from app.core.security import create_token, get_password_hash
 from app import create_app
 from app.config import Settings
 
@@ -61,12 +61,13 @@ def client(app):
 @pytest.fixture
 def user_token():
     """创建测试用户token"""
-    return create_access_token(
+    return create_token(
         data={
             "sub": "test_user",
             "is_admin": False
         },
-        expires_delta=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        token_type="access",
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
 @pytest.fixture(autouse=True, scope="function")

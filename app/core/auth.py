@@ -135,6 +135,7 @@ async def refresh_token(
         print("令牌刷新成功")
         return {
             "access_token": new_access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer"
         }
     except AuthError as e:

@@ -167,4 +167,8 @@ async def test_refresh_token_invalid(client):
         "/api/auth/refresh",
         json={"refresh_token": "invalid_token"}
     )
-    assert response.status_code == 401 
+    assert response.status_code == 401
+
+def test_user_api():
+    """运行所有用户API测试"""
+    pytest.main(["-v", "tests/user_test/test_user_api.py"]) 
